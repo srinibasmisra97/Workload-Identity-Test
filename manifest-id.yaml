@@ -1,0 +1,86 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: demo-sql-sa
+  annotations:
+    iam.gke.io/gcp-service-account: demo-sql-sa@dev-trials-project.iam.gserviceaccount.com
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sql-crud-app-id
+spec:
+  selector:
+    matchLabels:
+      app: sql-crud-app-id
+  template:
+    metadata:
+      labels:
+        app: sql-crud-app-id
+    spec:
+      serviceAccountName: demo-sql-sa
+      containers:
+      - name: sql-crud-app-id
+        image: gcr.io/dev-trials-project/workload-identity-app
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "250m"
+          limits:
+            memory: "128Mi"
+            cpu: "500m"
+        env:
+        - name: SQL_HOST
+          valueFrom:
+            secretKeyRef:
+              name: db-credentials
+              key: SQL_HOST
+        - name: SQL_USER
+          valueFrom:
+            secretKeyRef:
+              name: db-credentials
+              key: SQL_USER
+        - name: SQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: db-credentials
+              key: SQL_PASSWORD
+        - name: SQL_DATABASE
+          valueFrom:
+            secretKeyRef:
+              name: db-credentials
+              key: SQL_DATABASE
+      - name: cloud-sql-proxy
+        image: gcr.io/cloudsql-docker/gce-proxy:1.17
+        command:
+          - "/cloud_sql_proxy"
+          - "-instances=dev-trials-project:us-central1:demo-sql=tcp:3306"
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "250m"
+          limits:
+            memory: "128Mi"
+            cpu: "500m"
+        securityContext:
+          runAsNonRoot: true
+        volumeMounts:
+        - name: sql-client-sa
+          mountPath: /secrets/
+          readOnly: true
+      volumes:
+      - name: sql-client-sa
+        secret:
+          secretName: sql-client-sa
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sql-crud-app-id
+spec:
+  type: LoadBalancer
+  selector:
+    app: sql-crud-app-id
+  ports:
+    - port: 5000
+      targetPort: 5000

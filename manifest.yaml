@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sql-crud-app
+spec:
+  selector:
+    matchLabels:
+      app: sql-crud-app
+  template:
+    metadata:
+      labels:
+        app: sql-crud-app
+    spec:
+      containers:
+      - name: sql-crud-app
+        image: gcr.io/dev-trials-project/workload-identity-app
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "250m"
+          limits:
+            memory: "128Mi"
+            cpu: "500m"
+        env:
+        - name: SQL_HOST
+          valueFrom:
+            secretKeyRef:
+              name: db-credentials
+              key: SQL_HOST
+        - name: SQL_USER
+          valueFrom:
+            secretKeyRef:
+              name: db-credentials
+              key: SQL_USER
+        - name: SQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: db-credentials
+              key: SQL_PASSWORD
+        - name: SQL_DATABASE
+          valueFrom:
+            secretKeyRef:
+              name: db-credentials
+              key: SQL_DATABASE
+      - name: cloud-sql-proxy
+        image: gcr.io/cloudsql-docker/gce-proxy:1.17
+        command:
+          - "/cloud_sql_proxy"
+          - "-instances=dev-trials-project:us-central1:demo-sql=tcp:3306"
+          - "-credential_file=/secrets/service_account.json"
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "250m"
+          limits:
+            memory: "128Mi"
+            cpu: "500m"
+        securityContext:
+          runAsNonRoot: true
+        volumeMounts:
+        - name: sql-client-sa
+          mountPath: /secrets/
+          readOnly: true
+      volumes:
+      - name: sql-client-sa
+        secret:
+          secretName: sql-client-sa
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sql-crud-app
+spec:
+  type: LoadBalancer
+  selector:
+    app: sql-crud-app
+  ports:
+    - port: 5000
+      targetPort: 5000
